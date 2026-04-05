@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoVisor Perú Pro - INGEMMET & Búsqueda</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 0; }
+        
+        /* Pop-ups personalizados */
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .leaflet-popup-content { margin: 0; }
+        
+        /* Animaciones */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-custom { animation: spin 1s linear infinite; }
+        
+        /* Estilos de la barra de búsqueda y dropdown */
+        .search-container { transition: all 0.3s ease; }
+        .dropdown-menu { 
+            max-height: 200px; 
+            overflow-y: auto; 
+            scrollbar-width: thin;
+            scrollbar-color: #ef4444 #f1f5f9;
+        }
+        .dropdown-menu::-webkit-scrollbar { width: 4px; }
+        .dropdown-menu::-webkit-scrollbar-thumb { background-color: #ef4444; border-radius: 10px; }
+
+        /* Ajustes de controles Leaflet */
+        .leaflet-control-layers { border-radius: 12px !important; border: none !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important; padding: 8px !important; }
+    </style>
+</head>
+<body class="bg-slate-50 overflow-hidden">
+
+    <div id="map"></div>
+
+    <div class="absolute bottom-4 left-4 z-[1000] flex flex-col gap-3 pointer-events-none">
+        
+        <div id="help-tooltip" class="pointer-events-auto hidden sm:block">
+            <div class="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg border border-slate-200 shadow-md flex items-center gap-2 max-w-[249.2px]">
+                <div class="bg-slate-100 p-1 rounded-md shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                </div>
+                <p id="help-text" class="text-[9px] text-slate-600 font-medium leading-tight">Cambia a Geología 100k para consultar.</p>
+            </div>
+        </div>
+
+        <div class="search-container pointer-events-auto w-[249.2px] relative">
+            <ul id="suggestions-list" class="absolute bottom-full mb-2 w-full bg-white/95 backdrop-blur-md shadow-2xl rounded-xl border border-slate-200 overflow-hidden z-[1020] hidden dropdown-menu">
+            </ul>
+
+            <div class="bg-white/90 backdrop-blur-md shadow-xl rounded-xl border border-slate-200 flex items-center p-1 gap-1">
+                <input 
+                    type="text" 
+                    id="search-input" 
+                    placeholder="Buscar lugar en Perú..." 
+                    class="flex-1 bg-transparent border-none outline-none px-2 py-1 text-[11px] text-slate-800 placeholder:text-slate-400"
+                    autocomplete="off"
+                >
+                <button id="btn-search" class="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-lg transition-colors">
+                    <span id="search-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </span>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <div id="mode-indicator" class="bg-white/90 text-slate-600 border-slate-200 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-widest shadow-lg border backdrop-blur-md flex items-center gap-2 w-fit">
+                <div id="status-dot" class="w-1.5 h-1.5 rounded-full bg-red-500"></div>
+                <span id="status-text">Modo Calles</span>
+            </div>
+
+            <header class="bg-white/90 backdrop-blur-md shadow-xl rounded-xl border border-slate-200 flex items-center px-3 gap-3" style="width: 249.2px; height: 41.6px;">
+                <div class="flex items-center gap-2">
+                    <div class="bg-red-600 rounded-lg shadow-lg shadow-red-200 flex items-center justify-center" style="width: 31px; height: 30px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="m12 12 8-8V0H4v4l8 8Z"/><path d="m12 12-8 8v4h16v-4l-8-8Z"/><path d="M2 4h20"/><path d="M2 20h20"/></svg>
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <h1 class="text-slate-900 font-bold text-[11px] leading-none flex items-center" style="height: 11.5px;">GeoVisor Perú Pro</h1>
+                        <p class="text-slate-500 text-[9px] font-medium uppercase tracking-wider leading-none flex items-center" style="height: 12px;">Geología 100k - ArcGIS REST</p>
+                    </div>
+                </div>
+            </header>
+        </div>
+    </div>
+
+    <div class="absolute bottom-[110px] right-4 z-[1000]">
+        <button id="btn-locate" class="flex items-center justify-center gap-2 p-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-full shadow-xl transition-all duration-300 group">
+            <span id="locate-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            </span>
+            <span id="locate-text" class="font-bold tracking-wide uppercase text-[9px] pr-1">Ubicarme</span>
+        </button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        const REST_URL = 'https://geocatmin.ingemmet.gob.pe/arcgis/rest/services/SERV_GEOLOGIA_100K_INTEGRADA/MapServer';
+
+        // INICIALIZACIÓN DEL MAPA
+        const map = L.map('map', { center: [-9.19, -75.01], zoom: 6, zoomControl: false });
+
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+        
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP' 
+        });
+
+        const geology = L.tileLayer(`${REST_URL}/tile/{z}/{y}/{x}`, { attribution: 'INGEMMET', opacity: 1.0 });
+
+        const baseMaps = { 
+            "Mapa de Calles (OSM)": osm, 
+            "Satélite (Esri)": satellite, 
+            "Geología 100k (INGEMMET)": geology 
+        };
+        
+        L.control.layers(baseMaps, {}, { position: 'topright', collapsed: false }).addTo(map);
+        L.control.zoom({ position: 'topleft' }).addTo(map);
+        L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+
+        let activeMode = 'osm';
+        let userMarker = null;
+
+        map.on('baselayerchange', (e) => {
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            const help = document.getElementById('help-text');
+            const indicator = document.getElementById('mode-indicator');
+
+            if (e.name.includes("Geología")) {
+                activeMode = 'geology';
+                dot.className = "w-1.5 h-1.5 rounded-full bg-white animate-pulse";
+                indicator.className = "bg-red-500/90 text-white border-red-400 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-widest shadow-lg border backdrop-blur-md flex items-center gap-2 w-fit";
+                text.innerText = 'Modo Geológico';
+                help.innerText = 'Haz clic para consultar litoestratigrafía.';
+            } else {
+                activeMode = 'osm';
+                dot.className = "w-1.5 h-1.5 rounded-full bg-red-500";
+                indicator.className = "bg-white/90 text-slate-600 border-slate-200 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-widest shadow-lg border backdrop-blur-md flex items-center gap-2 w-fit";
+                text.innerText = 'Modo Calles';
+                help.innerText = 'Cambia a Geología 100k para consultar.';
+            }
+        });
+
+        // NUEVA FUNCIÓN OPTIMIZADA: CARRERA DE PROXIES EN PARALELO
+        async function fetchGeology(latlng) {
+            const bounds = map.getBounds();
+            const sw = bounds.getSouthWest();
+            const ne = bounds.getNorthEast();
+            const size = map.getSize();
+
+            const params = new URLSearchParams({
+                geometry: `${latlng.lng},${latlng.lat}`,
+                geometryType: 'esriGeometryPoint',
+                sr: '4326', layers: 'all', tolerance: '3',
+                mapExtent: `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`,
+                imageDisplay: `${size.x},${size.y},96`,
+                returnGeometry: 'false', f: 'json'
+            });
+
+            const targetUrl = `${REST_URL}/identify?${params.toString()}`;
+            
+            // ARRAY DE RESPALDO (Los 3 competidores)
+            const proxies = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+                `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+                `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+            ];
+
+            // Disparamos las 3 peticiones al mismo tiempo
+            const fetchPromises = proxies.map(url => 
+                new Promise(async (resolve, reject) => {
+                    const controller = new AbortController();
+                    // Tiempo máximo de espera: 8 segundos para no congelar la app
+                    const timeoutId = setTimeout(() => controller.abort(), 8000);
+                    
+                    try {
+                        const response = await fetch(url, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        if (!response.ok) throw new Error("Fallo HTTP");
+                        resolve(await response.json());
+                    } catch (err) {
+                        reject(err);
+                    }
+                })
+            );
+
+            try {
+                // Toma el primero que termine exitosamente y descarta el resto al instante
+                const data = await Promise.any(fetchPromises);
+
+                if (data.results && data.results.length > 0) {
+                    const geo = data.results.find(r => r.attributes.UNIDAD || r.attributes.ROCA);
+                    if (geo) {
+                        const a = geo.attributes;
+                        return `
+                            <div class="p-2 min-w-[220px]">
+                                <h3 class="font-bold text-red-600 border-b border-red-100 mb-2 pb-1 text-[10px] uppercase italic">Geología INGEMMET</h3>
+                                <div class="space-y-2">
+                                    <div><p class="text-[8px] text-slate-400 font-bold uppercase mb-0.5">Unidad</p><p class="text-[11px] text-slate-800 font-semibold leading-tight">${a.UNIDAD || a.NM_UNIDAD || 'N/A'}</p></div>
+                                    <div><p class="text-[8px] text-slate-400 font-bold uppercase mb-0.5">Roca</p><p class="text-[11px] text-slate-800 font-semibold leading-tight">${a.ROCA || a.NM_ROCA || 'N/A'}</p></div>
+                                    <div><p class="text-[8px] text-slate-400 font-bold uppercase mb-0.5">Edad</p><p class="text-[11px] text-slate-800 font-semibold leading-tight">${a.EDAD || a.NM_EDAD || 'N/A'}</p></div>
+                                </div>
+                            </div>`;
+                    }
+                }
+                return `<div class="p-3 text-[10px] text-slate-500 text-center">Sin datos litoestratigráficos aquí</div>`;
+                
+            } catch (e) {
+                // Solo entra aquí si LOS 3 PROXIES fallaron o agotaron su tiempo
+                return `<div class="p-2 text-[10px] text-red-500 italic">Error de red (Proxies inestables)</div>`;
+            }
+        }
+
+        // LÓGICA DE BÚSQUEDA (NOMINATIM)
+        const searchInput = document.getElementById('search-input');
+        const suggestionsList = document.getElementById('suggestions-list');
+        const btnSearch = document.getElementById('btn-search');
+        let searchTimeout;
+
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            const query = searchInput.value;
+            if (query.length < 3) { suggestionsList.classList.add('hidden'); return; }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=pe&limit=5`);
+                    const data = await res.json();
+                    renderSuggestions(data);
+                } catch (e) { console.error(e); }
+            }, 300);
+        });
+
+        function renderSuggestions(data) {
+            suggestionsList.innerHTML = '';
+            if (data.length === 0) { suggestionsList.classList.add('hidden'); return; }
+
+            data.forEach(item => {
+                const li = document.createElement('li');
+                li.className = "px-3 py-2 text-[10px] text-slate-700 hover:bg-red-50 hover:text-red-700 cursor-pointer border-b border-slate-100 last:border-none transition-colors";
+                li.innerText = item.display_name;
+                li.onclick = () => selectLocation(item);
+                suggestionsList.appendChild(li);
+            });
+            suggestionsList.classList.remove('hidden');
+        }
+
+        async function selectLocation(item) {
+            const latlng = L.latLng(item.lat, item.lon);
+            searchInput.value = item.display_name;
+            suggestionsList.classList.add('hidden');
+            map.flyTo(latlng, 14, { duration: 2 });
+            
+            if (userMarker) userMarker.remove();
+            const redIcon = L.icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]
+            });
+            userMarker = L.marker(latlng, { icon: redIcon }).addTo(map);
+
+            if (activeMode === 'geology') {
+                const content = await fetchGeology(latlng);
+                userMarker.bindPopup(content).openPopup();
+            } else {
+                userMarker.bindPopup(`<div class="p-2 text-[10px] font-bold">${item.display_name}</div>`).openPopup();
+            }
+        }
+
+        btnSearch.onclick = async () => {
+            const query = searchInput.value;
+            if (!query) return;
+            btnSearch.innerHTML = `<svg class="animate-spin-custom" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=pe&limit=1`);
+                const data = await res.json();
+                if (data.length > 0) selectLocation(data[0]);
+                else alert("Lugar no encontrado en Perú");
+            } catch (e) { alert("Error en la búsqueda"); }
+            btnSearch.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
+        };
+
+        searchInput.onkeydown = (e) => { if (e.key === 'Enter') btnSearch.onclick(); };
+
+        // GEOLOCALIZACIÓN
+        const btnLocate = document.getElementById('btn-locate');
+        btnLocate.onclick = () => {
+            const icon = document.getElementById('locate-icon');
+            const text = document.getElementById('locate-text');
+            text.innerText = 'Ubicando...';
+            icon.innerHTML = `<svg class="animate-spin-custom" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                map.flyTo(latlng, 16);
+                if (userMarker) userMarker.remove();
+                userMarker = L.marker(latlng, { icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41] }) }).addTo(map);
+
+                if (activeMode === 'geology') {
+                    const content = await fetchGeology(latlng);
+                    userMarker.bindPopup(content).openPopup();
+                } else {
+                    userMarker.bindPopup('<b>Tu ubicación</b>').openPopup();
+                }
+                text.innerText = 'Ubicarme';
+                icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`;
+            }, () => { alert("Error GPS"); text.innerText = 'Ubicarme'; }, { enableHighAccuracy: true });
+        };
+
+        map.on('click', async (e) => {
+            if (activeMode === 'geology') {
+                const content = await fetchGeology(e.latlng);
+                L.popup().setLatLng(e.latlng).setContent(content).openOn(map);
+            }
+        });
+    </script>
+</body>
+</html>
